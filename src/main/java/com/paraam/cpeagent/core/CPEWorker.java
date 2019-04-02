@@ -61,15 +61,10 @@ public class CPEWorker implements Runnable {
 		//((ConfParameter)confdb.confs.get("InternetGatewayDevice.ManagementServer.PeriodicInformInterval")).value = "1800";
 
         XmlFormatter xmlfmt;
-        
-        if(xmlformatter.equals("normal")) {
-            xmlfmt = new XmlFormatter();
-        }
-        else if(xmlformatter.equals("stripdec")) {
+        if(xmlformatter != null && xmlformatter.equals("stripdec")) {
             xmlfmt = new XmlFormatter(true);
-        }
-        else {
-            xmlfmt = null;
+        } else {
+            xmlfmt = new XmlFormatter();
         }
         
 		CPEHttpServer httpserver = new CPEHttpServer(confdb, username, passwd, authtype, useragent, xmlfmt);
