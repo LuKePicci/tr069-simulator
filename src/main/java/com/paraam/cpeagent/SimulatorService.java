@@ -1,7 +1,9 @@
 package com.paraam.cpeagent;
 
 import java.io.File;
+import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
 
 import com.bazaarvoice.dropwizard.assets.ConfiguredAssetsBundle;
@@ -14,6 +16,9 @@ import com.yammer.dropwizard.Service;
 import com.yammer.dropwizard.config.Bootstrap;
 import com.yammer.dropwizard.config.Environment;
 import com.yammer.dropwizard.views.ViewBundle;
+
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
 
 public class SimulatorService extends Service<SimulatorConfiguration> {
     // names of environment variables provided for Dockerfile.
@@ -29,6 +34,7 @@ public class SimulatorService extends Service<SimulatorConfiguration> {
     private static final String SERIAL_NUMBER_FORMAT = "SERIAL_NUMBER_FMT";
     private static final String SERIAL_NUMBER = "SERIAL_NUMBER";
     private static final String IP_ADDRESS = "IP_ADDRESS";
+    private static final String STRANGE_ACS = "STRANGE_ACS";
 
     public static void main(final String[] args) throws Exception {
         try {
@@ -46,100 +52,133 @@ public class SimulatorService extends Service<SimulatorConfiguration> {
         bootstrap.addBundle(GuiceBundle.newBuilder()
                 .addModule(new SimulatorModule())
                 .enableAutoConfig(getClass().getPackage().getName())
-                .build()
-        );
+                .build());
     }
 
     @Override
     public void run(final SimulatorConfiguration configuration, final Environment environment) {
-        final AgentConfig config = this.readAgentConfig();
-        final String ipadr = config.getIpAddress();
-        final CPEWorker worker = new CPEWorker(ipadr, config.getConnectionRequestPort(), config.getAcsUrl(),
-                config.getConnectionRequestPath(), config.getPeriodicInformInterval(),
-                config.getSimulatorLocation(), config.getAuthUserName(), config.getAuthPassword(),
-                config.getAuthType(), config.getUserAgent(), config.getXmlFormat(),
-                config.getSerialNumberFmt(), config.getSerialNumber());
-        final CPEHttpServer httpserver = worker.getNewHttpServer();
-		Thread serverthread = new Thread(httpserver, "Http_Server"); 
-		serverthread.start();
-		final CPEPeriodicInform periodicInform = worker.getNewPeriodicInform();
-		Thread informthread = new Thread(periodicInform, "Periodic_Inform");
-		informthread.start();
-        final Thread cpthread = new Thread(worker, "WorkerThread_" + 0);
-        cpthread.start();
+        final ArrayList<AgentConfig> agentConfigs = this.readAgentConfig();
+        CPEUtil util = new CPEUtil();
+        int threadcnt = 0;
+
+        for (AgentConfig config : agentConfigs) {
+            ArrayList<String> iplist = new ArrayList<String>();
+            if (!util.isValidIPAddress(config.getStartIpAddress())) {
+                continue;
+            }
+            if (!util.isValidIPAddress(config.getEndIpAddress())) {
+                iplist.add(config.getStartIpAddress());
+            } else {
+                iplist = util.range2iplist(config.getStartIpAddress(), config.getEndIpAddress());
+            }
+
+            for (String ipaddr : iplist) {
+                final CPEWorker worker = new CPEWorker(ipaddr, config.getConnectionRequestPort() + threadcnt, config.getAcsUrl(),
+                        config.getConnectionRequestPath(), config.getPeriodicInformInterval(),
+                        config.getSimulatorLocation(), config.getAuthUserName(), config.getAuthPassword(),
+                        config.getAuthType(), config.getUserAgent(), config.getXmlFormat(),
+                        config.getSerialNumberFmt(), config.getSerialNumber() + threadcnt, config.getStrangeAcs());
+                final CPEHttpServer httpserver = worker.getNewHttpServer();
+                Thread serverthread = new Thread(httpserver, "Http_Server");
+                serverthread.start();
+                final CPEPeriodicInform periodicInform = worker.getNewPeriodicInform();
+                Thread informthread = new Thread(periodicInform, "Periodic_Inform");
+                informthread.start();
+                final Thread cpthread = new Thread(worker, "WorkerThread_" + threadcnt);
+                cpthread.start();
+                threadcnt++;
+            }
+        }
     }
 
-    private AgentConfig readAgentConfig() {
+    private ArrayList<AgentConfig> readAgentConfig() {
         final String confDir = "." + File.separator + "conf";
         final String filepath = confDir + File.separator + "agent.csv";
-        //System.out.println("Current Filepath Checking >>>> " + filepath );
+        // System.out.println("Current Filepath Checking >>>> " + filepath );
         final File userfile = new File(filepath);
-        AgentConfig config = userfile.exists() ? this.readAgentFile(filepath) : null;
+        ArrayList<AgentConfig> config = userfile.exists() ? this.readAgentFile(filepath) : null;
         if (config == null) {
-            config = this.readAgentEnvironment();
+            config.add(this.readAgentEnvironment());
         }
         return config;
     }
 
-    private AgentConfig readAgentFile(final String filepath) {
+    private ArrayList<AgentConfig> readAgentFile(final String filepath) {
+        CSVParser parser = new CSVParserBuilder()
+                .withSeparator(',')
+                .withIgnoreQuotations(false)
+                .build();
         final CPEUtil util = new CPEUtil();
         final ArrayList<String> csvlist = util.parseFile(filepath);
         final ArrayList<String[]> tokenized = new ArrayList<String[]>();
         for (final String line : csvlist) {
-            final String[] tokens = line.split(",");
-            if ((tokens.length > 0) && util.isValidIPAddress(tokens[0].trim()))
-                tokenized.add(tokens);
+            try {
+                String[] tokens = parser.parseLine(line);
+                if ((tokens.length > 0) && util.isValidIPAddress(tokens[0].trim())) {
+                    tokenized.add(tokens);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         if (tokenized.isEmpty()) {
             return null;
         }
 
-        final AgentConfig config = new AgentConfig();
-        final String[] csvline = tokenized.get(0);
+        final ArrayList<AgentConfig> agentConfigs = new ArrayList<AgentConfig>();
 
-        //System.out.println("CSV Line   >>>>>>>>>   " + csvline);
-        if (csvline.length >= 7) {
-            config.setIpAddress(csvline[0].trim());
-            config.setAcsUrl(csvline[2].trim());
-            config.setConnectionRequestPath(csvline[3].trim());
-            final String crPortVal = csvline[4].trim();
-            config.setConnectionRequestPort(Integer.parseInt(crPortVal));
-            final String informInterval = csvline[5].trim();
-            config.setPeriodicInformInterval(Integer.parseInt(informInterval));
-            config.setSimulatorLocation(csvline[6].trim());
-        }
-        // defaults if not set in the file
-        config.setUserAgent("tr069-simulator");
-        config.setXmlFormat("");
-        config.setAuthType("");
-        config.setAuthUserName("user");
-        config.setAuthPassword("");
+        for (String[] csvline : tokenized) {
+            final AgentConfig config = new AgentConfig();
 
-        if (csvline.length >= 10) {
-            config.setAuthUserName(csvline[7].trim());
-            config.setAuthPassword(csvline[8].trim());
-            config.setAuthType(csvline[9].trim());
-        }
-        if (csvline.length >= 11) {
-            config.setUserAgent(csvline[10].trim());
-        }
-        if (csvline.length >= 12) {
-            config.setXmlFormat(csvline[11].trim());
-        }
+            // System.out.println("CSV Line >>>>>>>>> " + csvline);
+            if (csvline.length >= 7) {
+                config.setStartIpAddress(csvline[0].trim());
+                config.setEndIpAddress(csvline[1].trim());
+                config.setAcsUrl(csvline[2].trim());
+                config.setConnectionRequestPath(csvline[3].trim());
+                final String crPortVal = csvline[4].trim();
+                config.setConnectionRequestPort(Integer.parseInt(crPortVal));
+                final String informInterval = csvline[5].trim();
+                config.setPeriodicInformInterval(Integer.parseInt(informInterval));
+                config.setSimulatorLocation(csvline[6].trim());
+            }
+            // defaults if not set in the file
+            config.setUserAgent("tr069-simulator");
+            config.setXmlFormat("");
+            config.setAuthType("");
+            config.setAuthUserName("user");
+            config.setAuthPassword("");
 
-        if (csvline.length >= 13) {
-            config.setSerialNumberFmt(csvline[12].trim());
-            config.setSerialNumber(0);
+            if (csvline.length >= 10) {
+                config.setAuthUserName(csvline[7].trim());
+                config.setAuthPassword(csvline[8].trim());
+                config.setAuthType(csvline[9].trim());
+            }
+            if (csvline.length >= 11) {
+                config.setUserAgent(csvline[10].trim());
+            }
+            if (csvline.length >= 12) {
+                config.setXmlFormat(csvline[11].trim());
+            }
+            if (csvline.length >= 13) {
+                config.setSerialNumberFmt(csvline[12].trim());
+                config.setSerialNumber(0);
+            }
+            if (csvline.length >= 14) {
+                config.setSerialNumber(Integer.parseInt(csvline[13].trim()));
+            }
+            if (csvline.length >= 15) {
+                config.setStrangeAcs(Boolean.parseBoolean(csvline[14].trim()));
+            }
+            agentConfigs.add(config);
         }
-        if (csvline.length >= 14) {
-            config.setSerialNumber(Integer.parseInt(csvline[13].trim()));
-        }
-        return config;
+        return agentConfigs;
     }
 
     /**
      * Intended to read external properties from environment variables. Mostly
-     * Useful in docker containers where this is an easier way to convey configuration.
+     * Useful in docker containers where this is an easier way to convey
+     * configuration.
      *
      * @return Agent configuration object.
      */
@@ -149,7 +188,7 @@ public class SimulatorService extends Service<SimulatorConfiguration> {
         config.setXmlFormat("");
 
         final Map<String, String> environment = System.getenv();
-        config.setIpAddress(this.getOrDefault(SimulatorService.IP_ADDRESS, environment, "127.0.0.1"));
+        config.setStartIpAddress(this.getOrDefault(SimulatorService.IP_ADDRESS, environment, "127.0.0.1"));
         final String piIntervalInSec = this.getOrDefault(SimulatorService.PI_INTERVAL, environment, "600");
         config.setPeriodicInformInterval(Integer.parseInt(piIntervalInSec));
         config.setAuthType(this.getOrDefault(SimulatorService.AUTH_TYPE, environment, ""));
@@ -165,6 +204,8 @@ public class SimulatorService extends Service<SimulatorConfiguration> {
         config.setSerialNumberFmt(this.getOrDefault(SimulatorService.SERIAL_NUMBER_FORMAT, environment, "%08d"));
         final String serialNumberValue = this.getOrDefault(SimulatorService.SERIAL_NUMBER, environment, "0");
         config.setSerialNumber(Integer.parseInt(serialNumberValue));
+        final String strangeAcsValue = this.getOrDefault(SimulatorService.STRANGE_ACS, environment, "false");
+        config.setStrangeAcs(Boolean.getBoolean(strangeAcsValue));
 
         return config;
     }

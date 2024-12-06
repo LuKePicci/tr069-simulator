@@ -4,7 +4,8 @@ package com.paraam.cpeagent;
  * Structure to hold configuration information.
  */
 public class AgentConfig {
-    private String ipAddress;
+    private String startIpAddress;
+    private String endIpAddress;
     private String acsUrl;
     private String simulatorLocation;
     private int connectionRequestPort;
@@ -17,13 +18,22 @@ public class AgentConfig {
     private String xmlFormat;
     private String serialNumberFmt = "CPE%08d";
     private int serialNumber = 0;
+    private boolean strangeAcs = false;
 
-    public String getIpAddress() {
-        return this.ipAddress;
+    public String getStartIpAddress() {
+        return this.startIpAddress;
     }
 
-    public void setIpAddress(final String ipAddress) {
-        this.ipAddress = ipAddress;
+    public void setStartIpAddress(final String startIpAddress) {
+        this.startIpAddress = startIpAddress;
+    }
+
+    public String getEndIpAddress() {
+        return this.endIpAddress;
+    }
+
+    public void setEndIpAddress(final String endIpAddress) {
+        this.endIpAddress = endIpAddress;
     }
 
     public String getAcsUrl() {
@@ -121,11 +131,20 @@ public class AgentConfig {
     public void setSerialNumber(int serialNumber) {
         this.serialNumber = serialNumber;
     }
+    
+    public boolean getStrangeAcs() {
+        return this.strangeAcs;
+    }
+
+    public void setStrangeAcs(boolean strangeAcs) {
+        this.strangeAcs = strangeAcs;
+    }
 
     @Override
     public String toString() {
         return "AgentConfig{" +
-                "ipAddress='" + ipAddress + '\'' +
+                "startIpAddress='" + startIpAddress + '\'' +
+                ", endIpAddress='" + endIpAddress + '\'' +
                 ", acsUrl='" + acsUrl + '\'' +
                 ", simulatorLocation='" + simulatorLocation + '\'' +
                 ", connectionRequestPort=" + connectionRequestPort +
@@ -138,6 +157,7 @@ public class AgentConfig {
                 ", xmlFormat='" + xmlFormat + '\'' +
                 ", serialNumberFmt='" + serialNumberFmt + '\'' +
                 ", serialNumber='" + serialNumber + '\'' +
+                ", strangeAcs='" + strangeAcs + '\'' +
                 '}';
     }
 }
