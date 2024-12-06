@@ -13,10 +13,10 @@ To run this simulator,<br>
 
 <b>To run:</b><br>
 <div class="highlight"><pre>
-java -jar target/tr069-0.7.5-SNAPSHOT.jar server simulator.yml<br>
+java -jar target/tr069-x.y.z-SNAPSHOT.jar server simulator.yml<br>
 </pre></div>
 Or simply doubleclick the batch launcher (for Windows).
-<b>Note:</b> Java must be available in your system.
+<b>Note:</b> Java 8 must be available in your system.
 
 ### agent.csv Configuration
 
@@ -27,13 +27,16 @@ Or simply doubleclick the batch launcher (for Windows).
 - The simulator reports a ConnectionRequestURL constructed from the IP address, port, and the path configured in agent.csv
 - The Dump Location is a relative path to the folder containing the device configuration data
 - User name, password, and authentication type are used to authenticate the device with ACS
+- User agent for CPE SOAP HTTP requests
+- SOAP XML format processors to adapt flaky ACS implementations
+- The CPE serial number or a template to be auto incremented over the IP range
 
  Some examples:<br>
 <div class="highlight"><pre>
 <span class="c1">startip, endip, acs_url, conn_req_url, http_port, periodic_inform, dump_location, username, password, authtype, useragent, xmlformat, sn_format, sn_numeric</span>
 <span class="kd">192.168.1.11, 192.168.1.11, http://tr069.me/tr069/ws?wsdl&probe=257ebf, /wsdl, 8035, 300, /dump/microcell/, user1, passwd1, basic, TR069 Simulator, normal, CPE_A</span>
-<span class="kd">192.168.1.51, 192.168.1.120, http://tr069.me/tr069/ws?wsdl&probe=257ebf, /wsdl, 8035, 300, /dump/microcell/, nouser, nopass, none, TR069 Simulator, stripdec, CPE%00d, 51</span>
-<span class="kd">192.168.2.211, 192.168.2.220, http://tr069.me/tr069/ws?wsdl&probe=257ebf, /wsdl, 8035, 300, /dump/microcell/, user1, passwd1, digest, , stripdec+faketypes</span>
+<span class="kd">192.168.1.51, 192.168.1.120, http://tr069.me/tr069/ws?wsdl&probe=257ebf, /wsdl, 8035, 300, /dump/microcell/, nouser, nopass, none, TR069 Simulator, stripdec, CPE_%00d, 51</span>
+<span class="kd">192.168.2.211, 192.168.2.220, http://tr069.me/tr069/ws?wsdl&probe=257ebf, /wsdl, 8035, 300, /dump/microcell/, user1, passwd1, digest, "MySIM, CWMP/1.0", stripdec+faketypes</span>
 </pre></div>
 First CPE IP Address <br> 
 Last CPE IP Address<br>
@@ -46,23 +49,22 @@ ACS Management Server Username<br>
 ACS Management Server Password<br>
 ACS Management Server HTTP Auth Type (basic, digest, none)<br>
 CPE HTTP User Agent<br>
-XML Formatter Options<br>
-Serial Number Format (fixed or printf style to accomodate numeric)<br>
+XML Formatter Options (normal, stripdec, faketypes)<br>
+Serial Number Format (fixed or printf style to accomodate numeric auto-increment)<br>
 Serial Number Numeric (integer, incremented for each agent in IP interval)<br>
 
 You can modify these parameters according to your requirements. To simulate multiple CPE devices, provide the start and<br>
 end ipaddress. Periodic Inform Interval is in seconds. Simulator will send Inform request based on this parameter.<br><br> 
 
-Dump Location Path is the directory path where simulator will read and load the CPE data. <br>
+Dump Location Path is the directory path where simulator will read and load the CPE data model template.<br>
 Simulator will check for two set of files.<br>
-<b>1. getvalues.txt</b><br>
-<b>2. getnames.txt</b><br>
+- getvalues.txt
+- getnames.txt
 
 getvalues.txt contains Name/Value data as XML Nodes. Simulator will respond to the ACS Server based on this Name/Value Pair.<br>
 getnames.txt contains ParameterInfoStruct XML Nodes. Access detail about the parameters are retrieved from this file.
 <br>
-Currently, Femtocell device dump is being bundled with the JAR. If users wish to simulate a different CPE, either they need to <br>
-create these two XML files manually, or they need to take a dump from the real CPE device by reading the GetParameterValuesResponse
+Currently, microcell device data model dump is being included with this repo and bundled in the JAR. If you wish to simulate a different CPE, either they need to create these two XML files manually, or they need to take a dump from the real CPE device by reading the GetParameterValuesResponse
 and GetParameterNamesResponse for root node (e.g. InternetGatewayDevice, Device, ...).<br>
 
 If the ACS Server supports HTTP Authentication, provide the username, password and authentication type. basic and digest 
@@ -76,7 +78,7 @@ methods are currently supported. If authentication is not supported, leave auth 
 
 ### SDK Requirements
 
-- JDK >=1.7
+- JDK 1.8, newer JDK do not include necessary JIBX libriaries and tooling
 
 <br>
 
